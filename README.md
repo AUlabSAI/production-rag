@@ -34,37 +34,55 @@ flowchart LR
 
 ## Results
 
-Evaluated on **36 questions** (30 answerable, 6 unanswerable) written by hand from the course notes, using `gpt-5-mini` at medium reasoning effort. Each configuration was run only a few times, so read the numbers as indicative rather than precise: with 30 answerable questions, one question is worth 3.3 points.
+Evaluated on **36 questions** (30 answerable, 6 unanswerable) written by hand from the course notes, using `gpt-5-mini`. Four runs were made, one per reasoning-effort setting (high, low, medium, and a routed policy). Read the numbers as indicative rather than precise: with 30 answerable questions, one question is worth 3.3 points, and no configuration was repeated, so run-to-run noise could not be measured. These runs used an earlier version of the evaluation harness, which did not record the effort setting in the result files.
 
-**Final run** (`gpt-5-mini`, medium effort, recorded by `eval.run_eval`)
+**1. Baseline (reasoning effort = high)**
 
-| Mode | hit@1 | hit@4 | MRR | correct | faithful | refusal_acc | retrieval (s) | generation (s) |
-|---|---|---|---|---|---|---|---|---|
-| vector | 0.97 | 1.00 | 0.98 | 1.00 | 1.00 | 1.00 | 0.86 | 5.48 |
-| hybrid | 0.93 | 1.00 | 0.97 | 1.00 | 1.00 | 1.00 | 0.72 | 4.58 |
-| hybrid_rerank | 0.93 | 1.00 | 0.96 | 0.93 | 0.92 | 1.00 | 1.67 | 4.56 |
+| mode | hit@4 | MRR | correct | faithful | refusal_acc | retrieval (s) |
+|---|---|---|---|---|---|---|
+| vector | 1.00 | 0.98 | 0.97 | 0.97 | 0.83 | 0.50 |
+| hybrid | 1.00 | 0.97 | 0.90 | 0.97 | 1.00 | 0.46 |
+| hybrid_rerank | 1.00 | 0.96 | 0.90 | 0.94 | 1.00 | 1.33 |
 
-Latency varies between runs with machine load and network: vector retrieval measured 0.50 s, 0.50 s and 0.86 s across the three runs.
+**2. Reasoning effort = low**
 
-**Stability across runs** (`correct` / `faithful`)
+| mode | hit@4 | MRR | correct | faithful | refusal_acc | retrieval (s) |
+|---|---|---|---|---|---|---|
+| vector | 1.00 | 0.98 | 0.83 | 0.86 | 1.00 | 0.49 |
+| hybrid | 1.00 | 0.97 | 0.73 | 0.81 | 1.00 | 0.43 |
+| hybrid_rerank | 1.00 | 0.96 | 0.80 | 0.83 | 1.00 | 1.19 |
 
-| Mode | Run 1 (default effort) | Run 2 (medium effort) | Final run (medium effort) | Reduced-effort run |
-|---|---|---|---|---|
-| vector | 0.97 / 0.97 | 0.97 / 0.92 | 1.00 / 1.00 | 0.83 / 0.86 |
-| hybrid | 0.90 / 0.97 | 1.00 / 1.00 | 1.00 / 1.00 | 0.73 / 0.81 |
-| hybrid_rerank | 0.90 / 0.94 | 0.87 / 0.92 | 0.93 / 0.92 | 0.80 / 0.83 |
+**3. Reasoning effort = medium**
+
+| mode | hit@4 | MRR | correct | faithful | refusal_acc | retrieval (s) |
+|---|---|---|---|---|---|---|
+| vector | 1.00 | 0.98 | 0.97 | 0.97 | 1.00 | 0.51 |
+| hybrid | 1.00 | 0.97 | 0.97 | 0.97 | 1.00 | 0.46 |
+| hybrid_rerank | 1.00 | 0.96 | 0.93 | 0.94 | 1.00 | 1.24 |
+
+**4. Effort = routed**
+
+| mode | hit@4 | MRR | correct | faithful | refusal_acc | retrieval (s) |
+|---|---|---|---|---|---|---|
+| vector | 1.00 | 0.98 | 0.97 | 0.92 | 1.00 | 0.50 |
+| hybrid | 1.00 | 0.97 | 1.00 | 1.00 | 1.00 | 0.44 |
+| hybrid_rerank | 1.00 | 0.96 | 0.87 | 0.92 | 1.00 | 1.25 |
+
+`routed` is the keyword-based effort policy: explanatory "why/how" questions run at the `ROUTE_HIGH` tier and all other questions at the `ROUTE_LOW` tier (defaults: high and low).
 
 **What the evaluation shows**
 
-- **Retrieval is saturated on this corpus.** `hit@4` is 1.00 for every mode in every run, because the right page lands in the top four chunks however you search. `hit@1` (0.93-0.97) and MRR (0.96-0.98) differ by about one question.
-- **Vector and hybrid are indistinguishable.** Over three runs at default or medium effort, `correct` was 0.97, 0.97, 1.00 for vector and 0.90, 1.00, 1.00 for hybrid. Hybrid moved by three questions between runs with the same retrieval settings, so gaps of a few questions are noise, not a ranking.
-- **The reranker never beat the other modes.** It had the lowest or tied-lowest `correct` score in all three runs (0.90, 0.87, 0.93) and was the slowest. That points to no benefit, and possibly a small cost, on this corpus; I have not inspected the failing cases, so I don't claim a cause. Retrieval with the reranker took about 0.8-0.95 s longer than hybrid (1.67 s vs 0.72 s in the final run), so it is optional and loaded only when requested.
-- **`hybrid` is the default for a design reason, not a measured win:** BM25 handles exact terms (names, acronyms, codes) that embeddings can blur, and its retrieval latency was no higher than vector's in any of the three runs (vector's includes an embedding API call).
-- **Lowering reasoning effort hurt quality.** In a run with reasoning effort set below the default, `correct` dropped to 0.73-0.83 across all three modes. Across the three default or medium runs the lowest score was 0.87, so the ranges don't overlap, and the service uses medium effort. `gpt-5-mini` spends hidden reasoning tokens before answering, and this task benefits from them. It is still one reduced-effort run on 30 questions, so treat it as directional.
+- **Retrieval is saturated on this corpus.** `hit@4` is 1.00 for every mode in every run, and MRR is the same in all four runs (vector 0.98, hybrid 0.97, hybrid_rerank 0.96), because retrieval doesn't depend on the LLM setting. The right page lands in the top four chunks however you search, so the answer-quality columns are where the runs differ.
+- **Vector and hybrid have no consistent winner.** `correct` for vector was 0.97, 0.83, 0.97, 0.97 across the four runs and for hybrid 0.90, 0.73, 0.97, 1.00. Hybrid was below vector at high effort and above it when routed. With no repeated runs of the same configuration, differences of a question or two can't be told apart from noise.
+- **The reranker never scored best and was the slowest.** At high, medium and routed effort it had the lowest or tied-lowest `correct` score (0.90, 0.93, 0.87). Pooled over those three runs, `correct` was 96.7% for vector, 95.6% for hybrid and 90.0% for the reranker (the runs reuse the same 30 questions, so these are not independent trials). That points to no benefit, and possibly a small cost, on this corpus; I have not inspected the failing cases, so I don't claim a cause. Retrieval with the reranker took about 0.8 s longer than hybrid in every run (roughly 2.8x: 1.19-1.33 s vs 0.43-0.46 s), so it is optional and loaded only when requested.
+- **`hybrid` is the default for a design reason, not a measured win:** BM25 handles exact terms (names, acronyms, codes) that embeddings can blur, and its retrieval latency was no higher than vector's in any of the four runs (0.43-0.46 s vs 0.49-0.51 s; vector's includes an embedding API call).
+- **Low effort hurt quality; high effort did not help.** At low effort, `correct` was 0.73-0.83 in all three modes; in the other three runs the lowest score was 0.87, so the ranges don't overlap. Averaged over the three modes, `correct` was 0.92 at high effort, 0.96 at medium, 0.94 routed and 0.79 at low. `gpt-5-mini` spends hidden reasoning tokens before answering, so lower effort cuts them, and on this task that cost accuracy. The low-effort result is one run on 30 questions, so treat it as directional. The service uses medium effort.
+- **Routing matched fixed-effort quality in one run.** With the default tiers, questions that don't look explanatory ran at low effort, yet `correct` averaged 0.94, in line with fixed medium (0.96) and fixed high (0.92). That is encouraging, but it is a single run, and per-question effort and latency were not recorded for it, so I don't claim a speed or cost saving. Medium stays the default until routing is measured against it with the current harness.
+- **Refusals were reliable.** Every mode refused every unanswerable question in every run, except vector at high effort, which answered one of the six (`refusal_acc` 0.83).
 
 **Metric definitions**
 
-- `hit@1` / `hit@4`: the labeled page (source file + page) is the top result / appears in the top 4 retrieved chunks. Labels are page-level so they stay valid if chunking changes.
+- `hit@4`: the labeled page (source file + page) appears in the top 4 retrieved chunks. Labels are page-level so they stay valid if chunking changes.
 - `MRR`: mean reciprocal rank of the first correct page.
 - `correct`: an LLM judge checks that the answer contains the key facts of the reference answer. For unanswerable questions, correct means the system refused.
 - `faithful`: an LLM judge checks that every claim is supported by the retrieved context.
@@ -142,7 +160,7 @@ Set in `.env`:
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | Optional. Enables tracing when both keys are set |
 | `REASONING_EFFORT` | `low`, `medium` (default), `high` or `routed` |
 
-Defaults such as chunk size (1000 / overlap 100), `TOP_K` (4), the models, and the reranker model live in `app/config.py`. An experimental `routed` effort policy (a keyword router that sends explanatory "why/how" questions to high effort) is implemented but has not been evaluated and is off by default.
+Defaults such as chunk size (1000 / overlap 100), `TOP_K` (4), the models, and the reranker model live in `app/config.py`. An experimental `routed` effort policy (a keyword router that sends explanatory "why/how" questions to the `ROUTE_HIGH` tier and everything else to `ROUTE_LOW`; defaults high and low) is off by default; see the results above for its single evaluation run.
 
 ## Development
 
@@ -194,10 +212,10 @@ Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ## Limitations and next steps
 
 - **PDF tables are extracted poorly.** The loader reads text in layout order, so table cells can come out interleaved (seen on a comparison table in the notes). Questions that depend on matching cells to columns may be unreliable. Next step: a layout-aware parser, measured against the existing evaluation.
-- **Small evaluation.** 36 questions from one document set, single runs, and an LLM judge from the same model family. Differences of a few questions are noise, as the stability table shows. The evaluation set describes private documents, so it can't be reproduced without your own corpus.
+- **Small evaluation.** 36 questions from one document set, one run per configuration, and an LLM judge from the same model family. There are no repeated runs of the same configuration, so differences of a question or two shouldn't be read as a ranking. The evaluation set describes private documents, so it can't be reproduced without your own corpus.
 - **No rate limiting and no TLS.** The service relies on the API key and an OpenAI spend limit. For a public deployment, put a reverse proxy in front for HTTPS and rate limiting.
 - **BM25 index is in memory** and rebuilt at startup, so new documents need an API restart.
 - **Streaming traces only the LLM call,** not retrieval, because tracing context doesn't carry across async generator yields.
 - **The Docker image is large** (4.72 GB on disk) because of PyTorch and the embedding stack.
 - **`langchain-community` (used for `PyPDFLoader`) is being deprecated.** It should be replaced when the PDF parser is upgraded.
-- **The `routed` effort policy is unevaluated.**
+- **The `routed` effort policy was evaluated in only one run,** without per-question effort or latency recorded, so its speed and cost benefit is unmeasured.
